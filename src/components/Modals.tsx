@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useMemo, useState } from 'react'
-import { useStore, useYou } from '../store'
-import type { Category, ItineraryItem, Suggestion, Trip } from '../types'
-import { CATEGORIES, CATEGORY_META, cx, datesBetween, fmtDate, uid, weekday } from '../utils'
+import { useActions, useStore, useYou } from '../store'
+import type { Category, ItineraryItem, Suggestion } from '../types'
+import { CATEGORIES, CATEGORY_META, cx, datesBetween, fmtDate, weekday } from '../utils'
 import { Avatar, Field, Modal } from './ui'
-import { TrashIcon } from './Icons'
+import { CheckIcon, TrashIcon } from './Icons'
 
 export type ModalSpec =
   | { kind: 'newTrip' }
@@ -11,6 +11,7 @@ export type ModalSpec =
   | { kind: 'editItem'; dayId: string; item: ItineraryItem }
   | { kind: 'newExpense' }
   | { kind: 'newPoll'; seedQuestion?: string; seedOptions?: string[] }
+  | { kind: 'invite' }
 
 interface UIValue {
   openModal: (spec: ModalSpec) => void
@@ -38,6 +39,7 @@ export function ModalProvider({ children }: { children: React.ReactNode }) {
       {spec?.kind === 'newPoll' && (
         <PollModal onClose={() => setSpec(null)} seedQuestion={spec.seedQuestion} seedOptions={spec.seedOptions} />
       )}
+      {spec?.kind === 'invite' && <InviteModal onClose={() => setSpec(null)} />}
     </UIContext.Provider>
   )
 }
@@ -75,44 +77,50 @@ function ItemModal({
   editing?: ItineraryItem
 }) {
   const { trip, dispatch } = useStore()
-  const you = useYou()
+  const actions = useActions()
   const [title, setTitle] = useState(editing?.title ?? seed?.title ?? '')
   const [time, setTime] = useState(editing?.time ?? seed?.time ?? '')
   const [note, setNote] = useState(editing?.note ?? '')
   const [category, setCategory] = useState<Category>(editing?.category ?? seed?.category ?? 'other')
-  const [targetDay, setTargetDay] = useState(dayId ?? trip.days[0]?.id ?? '')
+  const [targetDay, setTargetDay] = useState(dayId ?? trip?.days[0]?.id ?? '')
+  const [busy, setBusy] = useState(false)
 
-  const submit = (e: React.FormEvent) => {
+  if (!trip) return null
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!title.trim() || !targetDay) return
-    if (editing && dayId) {
-      dispatch({
-        type: 'UPDATE_ITEM',
-        tripId: trip.id,
-        dayId,
-        itemId: editing.id,
-        patch: { title: title.trim(), time: time.trim() || undefined, note: note.trim() || undefined, category },
-      })
-      if (targetDay !== dayId) {
-        dispatch({ type: 'MOVE_ITEM', tripId: trip.id, fromDayId: dayId, toDayId: targetDay, itemId: editing.id, index: 999 })
+    if (!title.trim() || !targetDay || busy) return
+    setBusy(true)
+    try {
+      if (editing && dayId) {
+        await actions.updateItem({
+          itemId: editing.id,
+          title: title.trim(),
+          time: time.trim() || null,
+          note: note.trim() || null,
+          category,
+        })
+        if (targetDay !== dayId) {
+          await actions.moveItem({ itemId: editing.id, toDayId: targetDay, toIndex: 999 })
+        }
+        dispatch({ type: 'TOAST', text: 'Stop updated', kind: 'ok' })
+      } else {
+        await actions.addItem({
+          dayId: targetDay,
+          title: title.trim(),
+          time: time.trim() || undefined,
+          note: note.trim() || undefined,
+          category,
+          fromChat: Boolean(seed?.messageId),
+        })
+        if (seed?.messageId) await actions.markMessageAdded(seed.messageId)
+        dispatch({ type: 'TOAST', text: `“${title.trim()}” added to the itinerary`, kind: 'ok' })
       }
-      dispatch({ type: 'TOAST', text: 'Stop updated', kind: 'ok' })
-    } else {
-      const item: ItineraryItem = {
-        id: uid('it'),
-        title: title.trim(),
-        time: time.trim() || undefined,
-        note: note.trim() || undefined,
-        category,
-        votes: [you.id],
-        addedBy: you.id,
-        fromChat: Boolean(seed?.messageId),
-      }
-      dispatch({ type: 'ADD_ITEM', tripId: trip.id, dayId: targetDay, item })
-      if (seed?.messageId) dispatch({ type: 'MARK_MESSAGE_ADDED', tripId: trip.id, messageId: seed.messageId })
-      dispatch({ type: 'TOAST', text: `“${item.title}” added to the itinerary`, kind: 'ok' })
+      onClose()
+    } catch {
+      dispatch({ type: 'TOAST', text: 'Could not save — try again', kind: 'warn' })
+      setBusy(false)
     }
-    onClose()
   }
 
   return (
@@ -146,8 +154,8 @@ function ItemModal({
             <button
               type="button"
               className="btn btn-danger"
-              onClick={() => {
-                dispatch({ type: 'DELETE_ITEM', tripId: trip.id, dayId, itemId: editing.id })
+              onClick={async () => {
+                await actions.deleteItem(editing.id)
                 dispatch({ type: 'TOAST', text: 'Stop removed', kind: 'info' })
                 onClose()
               }}
@@ -159,7 +167,7 @@ function ItemModal({
           <button type="button" className="btn" onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" className="btn btn-primary">
+          <button type="submit" className="btn btn-primary" disabled={busy}>
             {editing ? 'Save' : 'Add to itinerary'}
           </button>
         </footer>
@@ -180,39 +188,39 @@ function isoPlus(days: number): string {
 }
 
 function NewTripModal({ onClose }: { onClose: () => void }) {
-  const { dispatch, trip } = useStore()
+  const { dispatch } = useStore()
+  const actions = useActions()
   const [name, setName] = useState('')
   const [destination, setDestination] = useState('')
   const [emoji, setEmoji] = useState(TRIP_EMOJIS[0])
   const [start, setStart] = useState(isoPlus(30))
   const [end, setEnd] = useState(isoPlus(34))
   const [currency, setCurrency] = useState('EUR')
+  const [busy, setBusy] = useState(false)
 
-  const you = trip.members.find((m) => m.you) ?? trip.members[0]
-
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name.trim() || !destination.trim() || end < start) return
-    const dates = datesBetween(start, end).slice(0, 21)
-    const newTrip: Trip = {
-      id: uid('trip'),
-      name: name.trim(),
-      destination: destination.trim(),
-      emoji,
-      start,
-      end: dates[dates.length - 1],
-      currency,
-      palette: Math.floor(Math.random() * 5),
-      members: [you],
-      days: dates.map((date) => ({ id: uid('day'), date, items: [] })),
-      messages: [],
-      polls: [],
-      expenses: [],
-      packing: [],
+    if (!name.trim() || !destination.trim() || end < start || busy) return
+    setBusy(true)
+    try {
+      const dates = datesBetween(start, end).slice(0, 21)
+      const tripId = await actions.createTrip({
+        name: name.trim(),
+        destination: destination.trim(),
+        emoji,
+        start,
+        end: dates[dates.length - 1],
+        currency,
+        palette: Math.floor(Math.random() * 5),
+        dates,
+      })
+      dispatch({ type: 'SET_TRIP', tripId })
+      dispatch({ type: 'TOAST', text: `${emoji} ${name.trim()} created — invite the crew!`, kind: 'ok' })
+      onClose()
+    } catch {
+      dispatch({ type: 'TOAST', text: 'Could not create the trip — try again', kind: 'warn' })
+      setBusy(false)
     }
-    dispatch({ type: 'ADD_TRIP', trip: newTrip })
-    dispatch({ type: 'TOAST', text: `${emoji} ${newTrip.name} created — invite the crew!`, kind: 'ok' })
-    onClose()
   }
 
   return (
@@ -260,7 +268,7 @@ function NewTripModal({ onClose }: { onClose: () => void }) {
           <button type="button" className="btn" onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" className="btn btn-primary">
+          <button type="submit" className="btn btn-primary" disabled={busy}>
             Create trip
           </button>
         </footer>
@@ -273,27 +281,32 @@ function NewTripModal({ onClose }: { onClose: () => void }) {
 
 function ExpenseModal({ onClose }: { onClose: () => void }) {
   const { trip, dispatch } = useStore()
+  const actions = useActions()
   const you = useYou()
   const [title, setTitle] = useState('')
   const [amount, setAmount] = useState('')
-  const [paidBy, setPaidBy] = useState(you.id)
+  const [paidBy, setPaidBy] = useState(you?.id ?? '')
   const [category, setCategory] = useState<Category>('food')
-  const [split, setSplit] = useState<string[]>(trip.members.map((m) => m.id))
+  const [split, setSplit] = useState<string[]>(trip?.members.map((m) => m.id) ?? [])
+  const [busy, setBusy] = useState(false)
 
-  const toggleSplit = (id: string) =>
-    setSplit((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
+  if (!trip || !you) return null
 
-  const submit = (e: React.FormEvent) => {
+  const toggleSplit = (id: string) => setSplit((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     const amt = parseFloat(amount)
-    if (!title.trim() || !isFinite(amt) || amt <= 0 || split.length === 0) return
-    dispatch({
-      type: 'ADD_EXPENSE',
-      tripId: trip.id,
-      expense: { id: uid('exp'), title: title.trim(), amount: amt, paidBy, splitWith: split, category, ts: Date.now() },
-    })
-    dispatch({ type: 'TOAST', text: 'Expense logged and split', kind: 'ok' })
-    onClose()
+    if (!title.trim() || !isFinite(amt) || amt <= 0 || split.length === 0 || busy) return
+    setBusy(true)
+    try {
+      await actions.addExpense({ title: title.trim(), amount: amt, paidBy, splitWith: split, category })
+      dispatch({ type: 'TOAST', text: 'Expense logged and split', kind: 'ok' })
+      onClose()
+    } catch {
+      dispatch({ type: 'TOAST', text: 'Could not log the expense — try again', kind: 'warn' })
+      setBusy(false)
+    }
   }
 
   return (
@@ -304,20 +317,14 @@ function ExpenseModal({ onClose }: { onClose: () => void }) {
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Ferry tickets" required />
           </Field>
           <Field label={`Amount (${trip.currency})`}>
-            <input
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              inputMode="decimal"
-              placeholder="0.00"
-              required
-            />
+            <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0.00" required />
           </Field>
         </div>
         <Field label="Paid by">
           <select value={paidBy} onChange={(e) => setPaidBy(e.target.value)}>
             {trip.members.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.name}
+                {m.you ? 'You' : m.name}
               </option>
             ))}
           </select>
@@ -345,7 +352,7 @@ function ExpenseModal({ onClose }: { onClose: () => void }) {
           <button type="button" className="btn" onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" className="btn btn-primary">
+          <button type="submit" className="btn btn-primary" disabled={busy}>
             Log expense
           </button>
         </footer>
@@ -365,41 +372,30 @@ function PollModal({
   seedQuestion?: string
   seedOptions?: string[]
 }) {
-  const { trip, dispatch } = useStore()
-  const you = useYou()
+  const { dispatch } = useStore()
+  const actions = useActions()
   const [question, setQuestion] = useState(seedQuestion ?? '')
   const [options, setOptions] = useState<string[]>(() => {
     const base = seedOptions?.slice(0, 4) ?? []
     while (base.length < 2) base.push('')
     return base
   })
+  const [busy, setBusy] = useState(false)
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     const clean = options.map((o) => o.trim()).filter(Boolean)
-    if (!question.trim() || clean.length < 2) return
-    const poll = {
-      id: uid('poll'),
-      question: question.trim(),
-      createdBy: you.id,
-      status: 'open' as const,
-      ts: Date.now(),
-      options: clean.map((label) => ({ id: uid('opt'), label, votes: [] as string[] })),
+    if (!question.trim() || clean.length < 2 || busy) return
+    setBusy(true)
+    try {
+      await actions.createPoll({ question: question.trim(), options: clean })
+      dispatch({ type: 'SET_TAB', tab: 'polls' })
+      dispatch({ type: 'TOAST', text: 'Poll is live — the crew can vote now', kind: 'ok' })
+      onClose()
+    } catch {
+      dispatch({ type: 'TOAST', text: 'Could not open the poll — try again', kind: 'warn' })
+      setBusy(false)
     }
-    dispatch({ type: 'CREATE_POLL', tripId: trip.id, poll })
-    dispatch({ type: 'SET_TAB', tab: 'polls' })
-    dispatch({ type: 'TOAST', text: 'Poll is live — the crew has been pinged', kind: 'ok' })
-    // Simulate the crew trickling in to vote.
-    const others = trip.members.filter((m) => !m.you && m.online)
-    others.forEach((m, i) => {
-      if (Math.random() < 0.85) {
-        const opt = poll.options[Math.floor(Math.random() * poll.options.length)]
-        setTimeout(() => {
-          dispatch({ type: 'VOTE_POLL', tripId: trip.id, pollId: poll.id, optionId: opt.id, memberId: m.id })
-        }, 2000 + i * 1800 + Math.random() * 1500)
-      }
-    })
-    onClose()
   }
 
   return (
@@ -431,11 +427,87 @@ function PollModal({
           <button type="button" className="btn" onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" className="btn btn-primary">
+          <button type="submit" className="btn btn-primary" disabled={busy}>
             Open poll
           </button>
         </footer>
       </form>
+    </Modal>
+  )
+}
+
+// ---------------------------------------------------------------------------
+
+function InviteModal({ onClose }: { onClose: () => void }) {
+  const { trip, dispatch } = useStore()
+  const actions = useActions()
+  const [copied, setCopied] = useState(false)
+  const [rotating, setRotating] = useState(false)
+  if (!trip) return null
+
+  const link = `${window.location.origin}${window.location.pathname}?join=${trip.inviteCode}`
+  const isOwner = trip.members.find((m) => m.you)?.id === trip.ownerId
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(link)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      dispatch({ type: 'TOAST', text: 'Copy failed — select the link and copy manually', kind: 'warn' })
+    }
+  }
+
+  return (
+    <Modal title="Invite your crew" onClose={onClose}>
+      <div className="modal-body">
+        <p className="card-sub">
+          Anyone with this link can join <strong>{trip.name}</strong> and edit it live with you. They'll sign in, then land
+          straight in the trip.
+        </p>
+        <Field label="Invite link">
+          <div className="invite-row">
+            <input readOnly value={link} onFocus={(e) => e.currentTarget.select()} />
+            <button type="button" className="btn btn-primary" onClick={copy}>
+              {copied ? (
+                <>
+                  <CheckIcon size={14} /> Copied
+                </>
+              ) : (
+                'Copy'
+              )}
+            </button>
+          </div>
+        </Field>
+        <div className="invite-code">
+          <span>Or share the code</span>
+          <strong>{trip.inviteCode}</strong>
+        </div>
+        <footer className="modal-actions">
+          {isOwner && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={rotating}
+              onClick={async () => {
+                setRotating(true)
+                try {
+                  await actions.rotateInvite()
+                  dispatch({ type: 'TOAST', text: 'New invite link generated — the old one no longer works', kind: 'ok' })
+                } finally {
+                  setRotating(false)
+                }
+              }}
+            >
+              Reset link
+            </button>
+          )}
+          <span className="spacer" />
+          <button type="button" className="btn btn-primary" onClick={onClose}>
+            Done
+          </button>
+        </footer>
+      </div>
     </Modal>
   )
 }

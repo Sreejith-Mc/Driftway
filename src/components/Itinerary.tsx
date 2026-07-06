@@ -1,8 +1,8 @@
 import React, { useRef, useState } from 'react'
-import { useStore, useYou } from '../store'
+import { useActions, useStore, useYou } from '../store'
 import type { Day, ItineraryItem } from '../types'
 import { parseQuickAdd } from '../sim'
-import { CATEGORY_META, cx, fmtDate, uid, weekday } from '../utils'
+import { CATEGORY_META, cx, fmtDate, weekday } from '../utils'
 import { Avatar } from './ui'
 import { ClockIcon, GripIcon, HeartIcon, PlusIcon, SparkIcon } from './Icons'
 import { useUI } from './Modals'
@@ -29,6 +29,7 @@ function readPayload(e: React.DragEvent): DragPayload | null {
 export function Itinerary() {
   const { trip } = useStore()
   const [dragging, setDragging] = useState(false)
+  if (!trip) return null
 
   return (
     <div
@@ -42,9 +43,7 @@ export function Itinerary() {
     >
       <div className="itinerary-hint">
         <SparkIcon size={14} />
-        <span>
-          Drag stops to reorder or move between days — chat suggestions can be dropped straight onto a day.
-        </span>
+        <span>Drag stops to reorder or move between days — chat suggestions can be dropped straight onto a day.</span>
       </div>
       {trip.days.map((day, i) => (
         <DaySection key={day.id} day={day} index={i} />
@@ -54,57 +53,43 @@ export function Itinerary() {
 }
 
 function DaySection({ day, index }: { day: Day; index: number }) {
-  const { trip, dispatch } = useStore()
-  const you = useYou()
+  const { dispatch } = useStore()
+  const actions = useActions()
   const { openModal } = useUI()
   const [overIndex, setOverIndex] = useState<number | null>(null)
   const [quick, setQuick] = useState('')
   const quickRef = useRef<HTMLInputElement>(null)
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     const payload = readPayload(e)
     const idx = overIndex ?? day.items.length
     setOverIndex(null)
     if (!payload) return
-    if (payload.kind === 'item' && payload.itemId && payload.fromDayId) {
-      dispatch({
-        type: 'MOVE_ITEM',
-        tripId: trip.id,
-        fromDayId: payload.fromDayId,
-        toDayId: day.id,
-        itemId: payload.itemId,
-        index: idx,
-      })
+    if (payload.kind === 'item' && payload.itemId) {
+      await actions.moveItem({ itemId: payload.itemId, toDayId: day.id, toIndex: idx })
     } else if (payload.kind === 'suggestion' && payload.title) {
-      const item: ItineraryItem = {
-        id: uid('it'),
+      await actions.addItem({
+        dayId: day.id,
         title: payload.title,
         time: payload.time,
         category: payload.category ?? 'other',
-        votes: [you.id],
-        addedBy: you.id,
         fromChat: true,
-      }
-      dispatch({ type: 'ADD_ITEM', tripId: trip.id, dayId: day.id, item, index: idx })
-      if (payload.messageId) dispatch({ type: 'MARK_MESSAGE_ADDED', tripId: trip.id, messageId: payload.messageId })
+        atIndex: idx,
+      })
+      if (payload.messageId) await actions.markMessageAdded(payload.messageId)
       dispatch({ type: 'TOAST', text: `“${payload.title}” dropped onto Day ${index + 1}`, kind: 'ok' })
     }
   }
 
-  const quickAdd = (e: React.FormEvent) => {
+  const quickAdd = async (e: React.FormEvent) => {
     e.preventDefault()
     const text = quick.trim()
     if (!text) return
     const parsed = parseQuickAdd(text)
-    dispatch({
-      type: 'ADD_ITEM',
-      tripId: trip.id,
-      dayId: day.id,
-      item: { id: uid('it'), ...parsed, votes: [you.id], addedBy: you.id },
-    })
     setQuick('')
+    await actions.addItem({ dayId: day.id, title: parsed.title, time: parsed.time, category: parsed.category })
     quickRef.current?.focus()
   }
 
@@ -179,11 +164,12 @@ function ItemCard({
   dayId: string
   onDragOverItem: (e: React.DragEvent) => void
 }) {
-  const { trip, dispatch } = useStore()
+  const { trip } = useStore()
+  const actions = useActions()
   const you = useYou()
   const { openModal } = useUI()
-  const author = trip.members.find((m) => m.id === item.addedBy)
-  const voted = item.votes.includes(you.id)
+  const author = trip?.members.find((m) => m.id === item.addedBy)
+  const voted = you ? item.votes.includes(you.id) : false
 
   return (
     <article
@@ -228,7 +214,7 @@ function ItemCard({
         {author && <Avatar member={author} size={22} />}
         <button
           className={cx('vote-btn', voted && 'voted')}
-          onClick={() => dispatch({ type: 'TOGGLE_ITEM_VOTE', tripId: trip.id, dayId, itemId: item.id, memberId: you.id })}
+          onClick={() => actions.toggleItemVote(item.id)}
           aria-pressed={voted}
           aria-label={`${item.votes.length} votes — ${voted ? 'remove your vote' : 'vote for this'}`}
         >

@@ -173,6 +173,15 @@ export const ClockIcon = ({ size, className }: IconProps) =>
 export const MenuIcon = ({ size, className }: IconProps) =>
   base(size, className, <path d="M4 7h16M4 12h16M4 17h10" />)
 
+export const UserPlusIcon = ({ size, className }: IconProps) =>
+  base(size, className, (
+    <>
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
+      <path d="M18 8.5v5M15.5 11h5" />
+    </>
+  ))
+
 export const PinIcon = ({ size, className }: IconProps) =>
   base(size, className, (
     <>

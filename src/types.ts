@@ -91,12 +91,26 @@ export interface Trip {
   end: string // ISO date
   currency: string
   palette: number // cover gradient variant 0..4
+  inviteCode: string
+  ownerId: string
+  typing: string | null // member id currently typing in chat
   members: Member[]
   days: Day[]
   messages: Message[]
   polls: Poll[]
   expenses: Expense[]
   packing: PackingItem[]
+}
+
+// Lightweight shape for the sidebar trip list.
+export interface TripSummary {
+  id: string
+  name: string
+  destination: string
+  emoji: string
+  start: string
+  end: string
+  palette: number
 }
 
 export type Tab = 'overview' | 'itinerary' | 'polls' | 'budget' | 'packing'
@@ -108,15 +122,3 @@ export interface Toast {
 }
 
 export type Theme = 'day' | 'night'
-
-export interface AppState {
-  trips: Trip[]
-  activeTripId: string
-  tab: Tab
-  theme: Theme
-  chatOpen: boolean
-  navOpen: boolean // mobile drawer for the sidebar
-  typing: string | null // member id currently "typing" in chat
-  toasts: Toast[]
-  paletteOpen: boolean
-}

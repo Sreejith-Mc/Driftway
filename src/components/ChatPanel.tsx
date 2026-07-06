@@ -1,80 +1,57 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { useStore, useYou } from '../store'
+import { useActions, usePresence, useStore } from '../store'
 import type { Message } from '../types'
-import { nextReply, parseSuggestion, randomDelay } from '../sim'
-import { CATEGORY_META, cx, timeAgo, uid } from '../utils'
+import { parseSuggestion } from '../sim'
+import { CATEGORY_META, cx, timeAgo } from '../utils'
 import { Avatar } from './ui'
 import { PinIcon, PollIcon, SendIcon, SparkIcon, CheckIcon, XIcon } from './Icons'
 import { useUI } from './Modals'
 
 export function ChatPanel() {
   const { state, dispatch, trip } = useStore()
-  const you = useYou()
+  const actions = useActions()
   const { openModal } = useUI()
   const [draft, setDraft] = useState('')
+  const [typing, setTyping] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
-  const timers = useRef<number[]>([])
+  const typingTimer = useRef<number>()
 
+  // Broadcast presence + typing to the rest of the crew.
+  usePresence(typing)
+
+  const messageCount = trip?.messages.length ?? 0
   useEffect(() => {
     const el = scrollRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [trip.messages.length, state.typing, trip.id])
+  }, [messageCount, trip?.typing, trip?.id])
 
-  // Clear pending simulated replies when unmounting or switching trips.
-  useEffect(() => {
-    return () => {
-      timers.current.forEach(clearTimeout)
-      timers.current = []
-      dispatch({ type: 'SET_TYPING', memberId: null })
-    }
-  }, [trip.id, dispatch])
+  if (!trip) return <aside className={cx('chat', !state.chatOpen && 'chat-closed')} aria-label="Trip chat" />
 
-  const scheduleCrewReply = (tripId: string) => {
-    const others = trip.members.filter((m) => !m.you && m.online)
-    if (others.length === 0) return
-    const author = others[Math.floor(Math.random() * others.length)]
-    const reply = nextReply()
-    const t1 = window.setTimeout(() => {
-      dispatch({ type: 'SET_TYPING', memberId: author.id })
-      const t2 = window.setTimeout(() => {
-        dispatch({ type: 'SET_TYPING', memberId: null })
-        dispatch({
-          type: 'SEND_MESSAGE',
-          tripId,
-          message: {
-            id: uid('msg'),
-            authorId: author.id,
-            text: reply.text,
-            ts: Date.now(),
-            suggestion: parseSuggestion(reply.text),
-          },
-        })
-      }, randomDelay(1400, 2800))
-      timers.current.push(t2)
-    }, randomDelay(600, 1600))
-    timers.current.push(t1)
+  const flagTyping = (value: string) => {
+    setDraft(value)
+    setTyping(true)
+    window.clearTimeout(typingTimer.current)
+    typingTimer.current = window.setTimeout(() => setTyping(false), 2500)
   }
 
-  const send = (e: React.FormEvent) => {
+  const send = async (e: React.FormEvent) => {
     e.preventDefault()
     const text = draft.trim()
     if (!text) return
-    const message: Message = {
-      id: uid('msg'),
-      authorId: you.id,
-      text,
-      ts: Date.now(),
-      suggestion: parseSuggestion(text),
-    }
-    dispatch({ type: 'SEND_MESSAGE', tripId: trip.id, message })
+    const suggestion = parseSuggestion(text)
     setDraft('')
-    if (message.suggestion) {
-      dispatch({ type: 'TOAST', text: 'Driftway spotted a plan in that message ✨', kind: 'info' })
+    setTyping(false)
+    window.clearTimeout(typingTimer.current)
+    try {
+      await actions.sendMessage({ text, suggestion })
+      if (suggestion) dispatch({ type: 'TOAST', text: 'Driftway spotted a plan in that message ✨', kind: 'info' })
+    } catch {
+      dispatch({ type: 'TOAST', text: 'Message failed to send — try again', kind: 'warn' })
+      setDraft(text)
     }
-    scheduleCrewReply(trip.id)
   }
 
-  const typingMember = state.typing ? trip.members.find((m) => m.id === state.typing) : null
+  const typingMember = trip.typing ? trip.members.find((m) => m.id === trip.typing) : null
   const onlineCount = trip.members.filter((m) => m.online).length
 
   return (
@@ -95,6 +72,9 @@ export function ChatPanel() {
       </header>
 
       <div className="chat-scroll" ref={scrollRef}>
+        {trip.messages.length === 0 && (
+          <p className="chat-empty">No messages yet. Drop the first idea — Driftway turns plans into cards automatically.</p>
+        )}
         {trip.messages.map((m, i) => (
           <MessageBubble
             key={m.id}
@@ -127,7 +107,7 @@ export function ChatPanel() {
       <form className="chat-compose" onSubmit={send}>
         <input
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => flagTyping(e.target.value)}
           placeholder='Try: "let’s do a sunset picnic at the park around 7pm"'
           aria-label="Message the group"
         />
@@ -151,7 +131,7 @@ function MessageBubble({
   onPoll: (m: Message) => void
 }) {
   const { trip } = useStore()
-  const author = trip.members.find((m) => m.id === message.authorId)
+  const author = trip?.members.find((m) => m.id === message.authorId)
   if (!author) return null
   const mine = Boolean(author.you)
   const grouped = prev?.authorId === message.authorId && message.ts - prev.ts < 5 * 60_000

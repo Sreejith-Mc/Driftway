@@ -7,6 +7,7 @@ import { useUI } from './Modals'
 export function Overview() {
   const { state, dispatch, trip } = useStore()
   const { openModal } = useUI()
+  if (!trip) return null
 
   const until = daysUntil(trip.start)
   const length = tripLengthDays(trip.start, trip.end)

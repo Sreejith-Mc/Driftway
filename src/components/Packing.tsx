@@ -1,26 +1,28 @@
 import { useState } from 'react'
-import { useStore } from '../store'
-import { cx, uid } from '../utils'
+import { useActions, useStore } from '../store'
+import { cx } from '../utils'
 import { Avatar, EmptyState, ProgressBar } from './ui'
 import { CheckIcon, PackIcon, PlusIcon, TrashIcon } from './Icons'
 
 export function Packing() {
-  const { trip, dispatch } = useStore()
+  const { trip } = useStore()
+  const actions = useActions()
   const [draft, setDraft] = useState('')
+  if (!trip) return null
   const done = trip.packing.filter((p) => p.done).length
 
-  const add = (e: React.FormEvent) => {
+  const add = async (e: React.FormEvent) => {
     e.preventDefault()
     const label = draft.trim()
     if (!label) return
-    dispatch({ type: 'ADD_PACK', tripId: trip.id, item: { id: uid('pk'), label, done: false } })
     setDraft('')
+    await actions.addPack(label)
   }
 
   const cycleAssignee = (itemId: string, current?: string) => {
     const ids = [undefined, ...trip.members.map((m) => m.id)]
     const next = ids[(ids.indexOf(current) + 1) % ids.length]
-    dispatch({ type: 'ASSIGN_PACK', tripId: trip.id, itemId, assignee: next })
+    actions.assignPack({ itemId, assignee: next })
   }
 
   return (
@@ -54,7 +56,7 @@ export function Packing() {
               <li key={p.id} className={cx('pack-item', p.done && 'done')}>
                 <button
                   className="pack-check"
-                  onClick={() => dispatch({ type: 'TOGGLE_PACK', tripId: trip.id, itemId: p.id })}
+                  onClick={() => actions.togglePack(p.id)}
                   aria-pressed={p.done}
                   aria-label={p.done ? `Uncheck ${p.label}` : `Check off ${p.label}`}
                 >
@@ -71,7 +73,7 @@ export function Packing() {
                 <button
                   className="icon-btn icon-btn-quiet"
                   aria-label={`Delete ${p.label}`}
-                  onClick={() => dispatch({ type: 'DELETE_PACK', tripId: trip.id, itemId: p.id })}
+                  onClick={() => actions.deletePack(p.id)}
                 >
                   <TrashIcon size={14} />
                 </button>

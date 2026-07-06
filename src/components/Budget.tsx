@@ -1,4 +1,4 @@
-import { useStore } from '../store'
+import { useActions, useStore } from '../store'
 import type { Category } from '../types'
 import { CATEGORY_META, cx, money, timeAgo } from '../utils'
 import { Avatar, EmptyState } from './ui'
@@ -6,8 +6,10 @@ import { CoinIcon, PlusIcon, TrashIcon } from './Icons'
 import { useUI } from './Modals'
 
 export function Budget() {
-  const { trip, dispatch } = useStore()
+  const { trip } = useStore()
+  const actions = useActions()
   const { openModal } = useUI()
+  if (!trip) return null
 
   const total = trip.expenses.reduce((n, e) => n + e.amount, 0)
 
@@ -115,7 +117,7 @@ export function Budget() {
                   <button
                     className="icon-btn icon-btn-quiet"
                     aria-label={`Delete ${e.title}`}
-                    onClick={() => dispatch({ type: 'DELETE_EXPENSE', tripId: trip.id, expenseId: e.id })}
+                    onClick={() => actions.deleteExpense(e.id)}
                   >
                     <TrashIcon size={14} />
                   </button>

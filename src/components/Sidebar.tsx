@@ -1,14 +1,15 @@
-import { useStore } from '../store'
-import { fmtRange } from '../utils'
-import { cx } from '../utils'
+import { useAuthActions } from '@convex-dev/auth/react'
+import { useStore, useYou } from '../store'
+import { cx, fmtRange } from '../utils'
 import { CompassIcon, MoonIcon, PlusIcon, SunIcon } from './Icons'
 import { Avatar } from './ui'
 import { useUI } from './Modals'
 
 export function Sidebar() {
-  const { state, dispatch, trip } = useStore()
+  const { state, dispatch, trips } = useStore()
   const { openModal } = useUI()
-  const you = trip.members.find((m) => m.you)
+  const { signOut } = useAuthActions()
+  const you = useYou()
 
   return (
     <aside className="sidebar">
@@ -28,7 +29,7 @@ export function Sidebar() {
           </button>
         </div>
         <nav className="trip-list">
-          {state.trips.map((t) => (
+          {trips.map((t) => (
             <button
               key={t.id}
               className={cx('trip-chip', t.id === state.activeTripId && 'active')}
@@ -52,18 +53,17 @@ export function Sidebar() {
           {state.theme === 'day' ? <MoonIcon size={15} /> : <SunIcon size={15} />}
           <span>{state.theme === 'day' ? 'Overnight mode' : 'Daybreak mode'}</span>
         </button>
-        <button
-          className="side-foot-btn"
-          onClick={() => dispatch({ type: 'SET_PALETTE_OPEN', open: true })}
-          title="Command palette"
-        >
+        <button className="side-foot-btn" onClick={() => dispatch({ type: 'SET_PALETTE_OPEN', open: true })} title="Command palette">
           <span className="kbd">⌘K</span>
           <span>Command palette</span>
         </button>
         {you && (
           <div className="side-you">
             <Avatar member={you} size={28} />
-            <span>Signed in as you</span>
+            <span className="side-you-name">{you.name}</span>
+            <button className="side-signout" onClick={() => void signOut()} title="Sign out">
+              Sign out
+            </button>
           </div>
         )}
       </div>

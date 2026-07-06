@@ -1,9 +1,10 @@
 import { useStore } from '../store'
 import type { Tab } from '../types'
 import { cx, fmtRange, daysUntil } from '../utils'
-import { ChatIcon, CoinIcon, CompassIcon, DownloadIcon, MapIcon, MenuIcon, PackIcon, PollIcon } from './Icons'
+import { ChatIcon, CoinIcon, CompassIcon, DownloadIcon, MapIcon, MenuIcon, PackIcon, PollIcon, UserPlusIcon } from './Icons'
 import { AvatarStack } from './ui'
 import { exportItinerary } from '../export'
+import { useUI } from './Modals'
 
 const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
   { id: 'overview', label: 'Overview', icon: <CompassIcon size={15} /> },
@@ -15,6 +16,8 @@ const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
 
 export function TopBar() {
   const { state, dispatch, trip } = useStore()
+  const { openModal } = useUI()
+  if (!trip) return null
   const until = daysUntil(trip.start)
   const openPolls = trip.polls.filter((p) => p.status === 'open').length
 
@@ -36,6 +39,10 @@ export function TopBar() {
         </div>
         <div className="topbar-actions">
           <AvatarStack members={trip.members} />
+          <button className="btn btn-small invite-btn" onClick={() => openModal({ kind: 'invite' })} title="Invite your crew">
+            <UserPlusIcon size={15} />
+            <span className="invite-btn-label">Invite</span>
+          </button>
           <span className="v-rule" />
           <button
             className="icon-btn"

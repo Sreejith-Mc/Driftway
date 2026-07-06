@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useAuthActions } from '@convex-dev/auth/react'
 import { useStore } from '../store'
 import type { Tab } from '../types'
 import { exportItinerary } from '../export'
 import { useUI } from './Modals'
-import { ChatIcon, CoinIcon, CompassIcon, DownloadIcon, MapIcon, MoonIcon, PackIcon, PinIcon, PlusIcon, PollIcon, SparkIcon, SunIcon } from './Icons'
+import { ChatIcon, CoinIcon, CompassIcon, DownloadIcon, MapIcon, MoonIcon, PackIcon, PinIcon, PlusIcon, PollIcon, SunIcon, UserPlusIcon, XIcon } from './Icons'
 
 interface Command {
   id: string
@@ -15,8 +16,9 @@ interface Command {
 }
 
 export function CommandPalette() {
-  const { state, dispatch, trip } = useStore()
+  const { state, dispatch, trip, trips } = useStore()
   const { openModal } = useUI()
+  const { signOut } = useAuthActions()
   const [query, setQuery] = useState('')
   const [index, setIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -84,6 +86,16 @@ export function CommandPalette() {
         },
       },
       {
+        id: 'invite',
+        label: 'Invite your crew',
+        icon: <UserPlusIcon size={15} />,
+        keywords: 'invite share link crew join members',
+        run: () => {
+          close()
+          openModal({ kind: 'invite' })
+        },
+      },
+      {
         id: 'new-trip',
         label: 'Start a new trip',
         icon: <PlusIcon size={15} />,
@@ -91,17 +103,6 @@ export function CommandPalette() {
         run: () => {
           close()
           openModal({ kind: 'newTrip' })
-        },
-      },
-      {
-        id: 'export',
-        label: 'Export itinerary as Markdown',
-        icon: <DownloadIcon size={15} />,
-        keywords: 'export download markdown share',
-        run: () => {
-          exportItinerary(trip)
-          dispatch({ type: 'TOAST', text: 'Itinerary exported as Markdown', kind: 'ok' })
-          close()
         },
       },
       {
@@ -125,20 +126,31 @@ export function CommandPalette() {
         },
       },
       {
-        id: 'reset',
-        label: 'Reset demo data',
-        hint: 'restores the sample trips',
-        icon: <SparkIcon size={15} />,
-        keywords: 'reset demo restore sample data',
+        id: 'export',
+        label: 'Export itinerary as Markdown',
+        icon: <DownloadIcon size={15} />,
+        keywords: 'export download markdown share',
         run: () => {
-          dispatch({ type: 'RESET' })
-          dispatch({ type: 'TOAST', text: 'Demo data restored', kind: 'info' })
+          if (trip) {
+            exportItinerary(trip)
+            dispatch({ type: 'TOAST', text: 'Itinerary exported as Markdown', kind: 'ok' })
+          }
           close()
         },
       },
+      {
+        id: 'signout',
+        label: 'Sign out',
+        icon: <XIcon size={15} />,
+        keywords: 'sign out log out logout leave account',
+        run: () => {
+          close()
+          void signOut()
+        },
+      },
     ]
-    for (const t of state.trips) {
-      if (t.id !== trip.id) {
+    for (const t of trips) {
+      if (t.id !== trip?.id) {
         cmds.push({
           id: `switch-${t.id}`,
           label: `Switch to ${t.emoji} ${t.name}`,
@@ -152,7 +164,7 @@ export function CommandPalette() {
       }
     }
     return cmds
-  }, [state.theme, state.chatOpen, state.trips, trip, dispatch, openModal])
+  }, [state.theme, state.chatOpen, trips, trip, dispatch, openModal, signOut])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()

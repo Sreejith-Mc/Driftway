@@ -1,7 +1,7 @@
-import { useStore, useYou } from '../store'
+import { useActions, useStore, useYou } from '../store'
 import type { Poll } from '../types'
 import { guessCategory } from '../sim'
-import { cx, timeAgo, uid } from '../utils'
+import { cx, timeAgo } from '../utils'
 import { Avatar, EmptyState } from './ui'
 import { CheckIcon, PinIcon, PlusIcon, PollIcon } from './Icons'
 import { useUI } from './Modals'
@@ -9,6 +9,7 @@ import { useUI } from './Modals'
 export function Polls() {
   const { trip } = useStore()
   const { openModal } = useUI()
+  if (!trip) return null
   const open = trip.polls.filter((p) => p.status === 'open')
   const closed = trip.polls.filter((p) => p.status === 'closed')
 
@@ -58,30 +59,20 @@ export function Polls() {
 
 function PollCard({ poll }: { poll: Poll }) {
   const { trip, dispatch } = useStore()
+  const actions = useActions()
   const you = useYou()
+  if (!trip || !you) return null
   const creator = trip.members.find((m) => m.id === poll.createdBy)
   const totalVotes = poll.options.reduce((n, o) => n + o.votes.length, 0)
   const leader = [...poll.options].sort((a, b) => b.votes.length - a.votes.length)[0]
   const isOpen = poll.status === 'open'
 
-  const addWinner = () => {
+  const addWinner = async () => {
     if (!leader || leader.votes.length === 0) return
     const firstDay = trip.days[0]
     if (!firstDay) return
-    dispatch({
-      type: 'ADD_ITEM',
-      tripId: trip.id,
-      dayId: firstDay.id,
-      item: {
-        id: uid('it'),
-        title: leader.label,
-        category: guessCategory(leader.label),
-        votes: leader.votes,
-        addedBy: poll.createdBy,
-        fromChat: true,
-      },
-    })
-    dispatch({ type: 'CLOSE_POLL', tripId: trip.id, pollId: poll.id, resolvedTo: leader.id })
+    await actions.addItem({ dayId: firstDay.id, title: leader.label, category: guessCategory(leader.label), fromChat: true })
+    await actions.closePoll({ pollId: poll.id, resolvedTo: leader.id })
     dispatch({ type: 'TOAST', text: `Winner “${leader.label}” added to Day 1 — drag it wherever it fits`, kind: 'ok' })
   }
 
@@ -92,7 +83,8 @@ function PollCard({ poll }: { poll: Poll }) {
         <div>
           <h4>{poll.question}</h4>
           <p>
-            {creator?.you ? 'you' : creator?.name.split(' ')[0]} · {timeAgo(poll.ts)} · {totalVotes} vote{totalVotes === 1 ? '' : 's'}
+            {creator?.you ? 'you' : creator?.name.split(' ')[0] ?? 'someone'} · {timeAgo(poll.ts)} · {totalVotes} vote
+            {totalVotes === 1 ? '' : 's'}
           </p>
         </div>
         {!isOpen && (
@@ -112,7 +104,7 @@ function PollCard({ poll }: { poll: Poll }) {
               key={o.id}
               className={cx('poll-opt', yours && 'yours', winning && 'winning')}
               disabled={!isOpen}
-              onClick={() => dispatch({ type: 'VOTE_POLL', tripId: trip.id, pollId: poll.id, optionId: o.id, memberId: you.id })}
+              onClick={() => actions.votePoll({ pollId: poll.id, optionId: o.id })}
               aria-pressed={yours}
             >
               <span className="poll-fill" style={{ width: `${Math.round(pct * 100)}%` }} />
@@ -136,7 +128,7 @@ function PollCard({ poll }: { poll: Poll }) {
         <footer className="poll-foot">
           {poll.createdBy === you.id ? (
             <>
-              <button className="btn btn-small" onClick={() => dispatch({ type: 'CLOSE_POLL', tripId: trip.id, pollId: poll.id })}>
+              <button className="btn btn-small" onClick={() => actions.closePoll({ pollId: poll.id })}>
                 Close poll
               </button>
               <button className="btn btn-small btn-primary" onClick={addWinner} disabled={!leader || leader.votes.length === 0}>

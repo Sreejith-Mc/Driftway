@@ -90,6 +90,7 @@ export function ChatPanel() {
                 kind: 'newPoll',
                 seedQuestion: msg.suggestion ? `Should we do “${msg.suggestion.title}”?` : undefined,
                 seedOptions: ['Yes, lock it in', 'Pass this time'],
+                messageId: msg.id,
               })
             }
           />
@@ -140,6 +141,12 @@ function MessageBubble({
   if (!author) return null
   const mine = Boolean(author.you)
   const grouped = prev?.authorId === message.authorId && message.ts - prev.ts < 5 * 60_000
+
+  // A suggestion can be actioned once: either added to the itinerary, or put to
+  // a vote (which links a poll back to this message). Either locks both actions
+  // for everyone. Deleting the poll clears the link and re-opens the actions.
+  const linkedPoll = trip?.polls.find((p) => p.messageId === message.id)
+  const locked = Boolean(message.addedToItinerary || linkedPoll)
 
   const react = async (emoji: string) => {
     setPicker(false)
@@ -209,16 +216,20 @@ function MessageBubble({
         )}
         {message.suggestion && (
           <div
-            className={cx('sugg', message.addedToItinerary && 'sugg-added')}
-            draggable={!message.addedToItinerary}
+            className={cx('sugg', locked && 'sugg-added')}
+            draggable={!locked}
             onDragStart={(e) => {
+              if (locked) {
+                e.preventDefault()
+                return
+              }
               e.dataTransfer.setData(
                 'application/x-driftway',
                 JSON.stringify({ kind: 'suggestion', messageId: message.id, ...message.suggestion }),
               )
               e.dataTransfer.effectAllowed = 'copy'
             }}
-            title={message.addedToItinerary ? 'Already on the board' : 'Drag onto a day, or use the buttons'}
+            title={locked ? 'Already actioned' : 'Drag onto a day, or use the buttons'}
           >
             <div className="sugg-top">
               <SparkIcon size={13} className="sugg-spark" />
@@ -235,6 +246,15 @@ function MessageBubble({
               <p className="sugg-done">
                 <CheckIcon size={12} /> On the itinerary
               </p>
+            ) : linkedPoll ? (
+              <button
+                type="button"
+                className="sugg-done sugg-voting"
+                onClick={() => dispatch({ type: 'SET_TAB', tab: 'polls' })}
+                title="Open the Polls tab"
+              >
+                <PollIcon size={12} /> {linkedPoll.status === 'open' ? 'Up for a vote' : 'Vote settled'} · view
+              </button>
             ) : (
               <div className="sugg-actions">
                 <button onClick={() => onAdd(message)}>

@@ -24,9 +24,21 @@ export const add = mutation({
     category: categoryValidator,
     fromChat: v.optional(v.boolean()),
     atIndex: v.optional(v.number()),
+    // When adding straight from a chat suggestion, the source message. Locks
+    // that suggestion so it can't also be added again or put to a vote.
+    messageId: v.optional(v.id('messages')),
   },
   handler: async (ctx, args) => {
     const { userId } = await requireMembership(ctx, args.tripId)
+    if (args.messageId) {
+      const msg = await ctx.db.get(args.messageId)
+      if (msg?.addedToItinerary) throw new Error('That suggestion is already on the itinerary')
+      const poll = await ctx.db
+        .query('polls')
+        .withIndex('by_message', (q) => q.eq('messageId', args.messageId))
+        .first()
+      if (poll) throw new Error('That suggestion is already up for a vote')
+    }
     const siblings = await ctx.db.query('items').withIndex('by_day', (q) => q.eq('dayId', args.dayId)).collect()
     const index = args.atIndex ?? siblings.length
     // Shift everything at/after the insertion point down by one.
@@ -45,6 +57,9 @@ export const add = mutation({
       fromChat: args.fromChat,
       votes: [userId],
     })
+    // Mark the source suggestion as actioned in the same transaction, so the
+    // lock is atomic with the insert (no window for a duplicate add/poll).
+    if (args.messageId) await ctx.db.patch(args.messageId, { addedToItinerary: true })
     await renumber(ctx, args.dayId)
     return id as string
   },

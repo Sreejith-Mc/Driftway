@@ -10,7 +10,7 @@ export type ModalSpec =
   | { kind: 'addItem'; dayId?: string; seed?: Suggestion & { messageId?: string } }
   | { kind: 'editItem'; dayId: string; item: ItineraryItem }
   | { kind: 'newExpense' }
-  | { kind: 'newPoll'; seedQuestion?: string; seedOptions?: string[] }
+  | { kind: 'newPoll'; seedQuestion?: string; seedOptions?: string[]; messageId?: string }
   | { kind: 'invite' }
   | { kind: 'manageTrip' }
 
@@ -38,7 +38,12 @@ export function ModalProvider({ children }: { children: React.ReactNode }) {
       {spec?.kind === 'editItem' && <ItemModal onClose={() => setSpec(null)} dayId={spec.dayId} editing={spec.item} />}
       {spec?.kind === 'newExpense' && <ExpenseModal onClose={() => setSpec(null)} />}
       {spec?.kind === 'newPoll' && (
-        <PollModal onClose={() => setSpec(null)} seedQuestion={spec.seedQuestion} seedOptions={spec.seedOptions} />
+        <PollModal
+          onClose={() => setSpec(null)}
+          seedQuestion={spec.seedQuestion}
+          seedOptions={spec.seedOptions}
+          messageId={spec.messageId}
+        />
       )}
       {spec?.kind === 'invite' && <InviteModal onClose={() => setSpec(null)} />}
       {spec?.kind === 'manageTrip' && <ManageTripModal onClose={() => setSpec(null)} />}
@@ -114,8 +119,8 @@ function ItemModal({
           note: note.trim() || undefined,
           category,
           fromChat: Boolean(seed?.messageId),
+          messageId: seed?.messageId,
         })
-        if (seed?.messageId) await actions.markMessageAdded(seed.messageId)
         dispatch({ type: 'TOAST', text: `“${title.trim()}” added to the itinerary`, kind: 'ok' })
       }
       onClose()
@@ -369,10 +374,12 @@ function PollModal({
   onClose,
   seedQuestion,
   seedOptions,
+  messageId,
 }: {
   onClose: () => void
   seedQuestion?: string
   seedOptions?: string[]
+  messageId?: string
 }) {
   const { dispatch } = useStore()
   const actions = useActions()
@@ -390,12 +397,12 @@ function PollModal({
     if (!question.trim() || clean.length < 2 || busy) return
     setBusy(true)
     try {
-      await actions.createPoll({ question: question.trim(), options: clean })
+      await actions.createPoll({ question: question.trim(), options: clean, messageId })
       dispatch({ type: 'SET_TAB', tab: 'polls' })
       dispatch({ type: 'TOAST', text: 'Poll is live — the crew can vote now', kind: 'ok' })
       onClose()
     } catch {
-      dispatch({ type: 'TOAST', text: 'Could not open the poll — try again', kind: 'warn' })
+      dispatch({ type: 'TOAST', text: 'Could not open the poll — that suggestion may already be actioned', kind: 'warn' })
       setBusy(false)
     }
   }

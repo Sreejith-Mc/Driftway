@@ -85,6 +85,8 @@ export default defineSchema({
     text: v.string(),
     suggestion: v.optional(suggestionValidator),
     addedToItinerary: v.optional(v.boolean()),
+    // One entry per emoji that has at least one reactor.
+    reactions: v.optional(v.array(v.object({ emoji: v.string(), users: v.array(v.id('users')) }))),
   }).index('by_trip', ['tripId']),
 
   polls: defineTable({

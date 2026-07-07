@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { useActions, usePresence, useStore } from '../store'
+import { useActions, usePresence, useStore, useYou } from '../store'
 import type { Message } from '../types'
 import { parseSuggestion } from '../sim'
 import { CATEGORY_META, cx, timeAgo } from '../utils'
 import { Avatar } from './ui'
-import { PinIcon, PollIcon, SendIcon, SparkIcon, CheckIcon, XIcon } from './Icons'
+import { PinIcon, PollIcon, SendIcon, SmileIcon, SparkIcon, CheckIcon, XIcon } from './Icons'
 import { useUI } from './Modals'
+
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉']
 
 export function ChatPanel() {
   const { state, dispatch, trip } = useStore()
@@ -130,14 +132,34 @@ function MessageBubble({
   onAdd: (m: Message) => void
   onPoll: (m: Message) => void
 }) {
-  const { trip } = useStore()
+  const { trip, dispatch } = useStore()
+  const actions = useActions()
+  const you = useYou()
+  const [picker, setPicker] = useState(false)
   const author = trip?.members.find((m) => m.id === message.authorId)
   if (!author) return null
   const mine = Boolean(author.you)
   const grouped = prev?.authorId === message.authorId && message.ts - prev.ts < 5 * 60_000
 
+  const react = async (emoji: string) => {
+    setPicker(false)
+    try {
+      await actions.toggleReaction({ messageId: message.id, emoji })
+    } catch {
+      dispatch({ type: 'TOAST', text: 'Could not react — try again', kind: 'warn' })
+    }
+  }
+
+  const reactionTitle = (users: string[]) =>
+    users
+      .map((id) => {
+        const m = trip?.members.find((x) => x.id === id)
+        return m?.you ? 'You' : m?.name.split(' ')[0] ?? 'Someone'
+      })
+      .join(', ')
+
   return (
-    <div className={cx('msg', mine ? 'msg-you' : 'msg-them', grouped && 'msg-grouped')}>
+    <div className={cx('msg', mine ? 'msg-you' : 'msg-them', grouped && 'msg-grouped')} onMouseLeave={() => setPicker(false)}>
       {!mine && !grouped ? <Avatar member={author} size={26} /> : !mine ? <span className="avatar-gap" /> : null}
       <div className="msg-col">
         {!grouped && (
@@ -145,7 +167,44 @@ function MessageBubble({
             {mine ? 'You' : author.name.split(' ')[0]} · {timeAgo(message.ts)}
           </span>
         )}
-        <div className="bubble">{message.text}</div>
+        <div className="bubble-row">
+          <div className="bubble">{message.text}</div>
+          <span className={cx('react-wrap', picker && 'open')}>
+            <button
+              type="button"
+              className="icon-btn react-btn"
+              aria-label="Add reaction"
+              title="Add reaction"
+              onClick={() => setPicker((p) => !p)}
+            >
+              <SmileIcon size={14} />
+            </button>
+            {picker && (
+              <span className="react-picker" role="menu" aria-label="Pick a reaction">
+                {REACTION_EMOJIS.map((e) => (
+                  <button key={e} type="button" role="menuitem" onClick={() => react(e)}>
+                    {e}
+                  </button>
+                ))}
+              </span>
+            )}
+          </span>
+        </div>
+        {message.reactions && message.reactions.length > 0 && (
+          <div className="react-chips">
+            {message.reactions.map((r) => (
+              <button
+                key={r.emoji}
+                type="button"
+                className={cx('react-chip', you && r.users.includes(you.id) && 'yours')}
+                onClick={() => react(r.emoji)}
+                title={reactionTitle(r.users)}
+              >
+                {r.emoji} <em>{r.users.length}</em>
+              </button>
+            ))}
+          </div>
+        )}
         {message.suggestion && (
           <div
             className={cx('sugg', message.addedToItinerary && 'sugg-added')}

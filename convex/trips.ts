@@ -83,6 +83,7 @@ async function assembleTrip(ctx: QueryCtx, trip: Doc<'trips'>, viewerId: Id<'use
         ts: m._creationTime,
         suggestion: m.suggestion,
         addedToItinerary: m.addedToItinerary,
+        reactions: (m.reactions ?? []).map((r) => ({ emoji: r.emoji, users: r.users as string[] })),
       })),
     polls: [...polls]
       .sort((a, b) => b._creationTime - a._creationTime)

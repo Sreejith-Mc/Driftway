@@ -40,6 +40,11 @@ export interface Suggestion {
   time?: string
 }
 
+export interface Reaction {
+  emoji: string
+  users: string[] // member ids who reacted with this emoji
+}
+
 export interface Message {
   id: string
   authorId: string
@@ -47,6 +52,7 @@ export interface Message {
   ts: number
   suggestion?: Suggestion
   addedToItinerary?: boolean
+  reactions?: Reaction[]
 }
 
 export interface PollOption {

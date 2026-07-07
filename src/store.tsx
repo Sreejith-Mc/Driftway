@@ -118,6 +118,7 @@ export interface Actions {
   toggleItemVote: (itemId: string) => Promise<void>
   sendMessage: (args: { text: string; suggestion?: Suggestion }) => Promise<void>
   markMessageAdded: (messageId: string) => Promise<void>
+  toggleReaction: (args: { messageId: string; emoji: string }) => Promise<void>
   createPoll: (args: { question: string; options: string[] }) => Promise<void>
   votePoll: (args: { pollId: string; optionId: string }) => Promise<void>
   closePoll: (args: { pollId: string; resolvedTo?: string }) => Promise<void>
@@ -195,6 +196,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const mVoteItem = useMutation(api.items.toggleVote)
   const mSend = useMutation(api.messages.send)
   const mMarkAdded = useMutation(api.messages.markAdded)
+  const mToggleReaction = useMutation(api.messages.toggleReaction)
   const mCreatePoll = useMutation(api.polls.create)
   const mVotePoll = useMutation(api.polls.vote)
   const mClosePoll = useMutation(api.polls.close)
@@ -244,6 +246,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
       markMessageAdded: async (messageId) => {
         await mMarkAdded({ messageId: messageId as Id<'messages'> })
+      },
+      toggleReaction: async ({ messageId, emoji }) => {
+        await mToggleReaction({ messageId: messageId as Id<'messages'>, emoji })
       },
       createPoll: async ({ question, options }) => {
         await mCreatePoll({ tripId: tid(), question, options })

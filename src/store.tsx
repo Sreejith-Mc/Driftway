@@ -111,6 +111,7 @@ export interface Actions {
     category: Category
     fromChat?: boolean
     atIndex?: number
+    messageId?: string
   }) => Promise<void>
   updateItem: (args: { itemId: string; title?: string; time?: string | null; note?: string | null; category?: Category }) => Promise<void>
   deleteItem: (itemId: string) => Promise<void>
@@ -119,9 +120,10 @@ export interface Actions {
   sendMessage: (args: { text: string; suggestion?: Suggestion }) => Promise<void>
   markMessageAdded: (messageId: string) => Promise<void>
   toggleReaction: (args: { messageId: string; emoji: string }) => Promise<void>
-  createPoll: (args: { question: string; options: string[] }) => Promise<void>
+  createPoll: (args: { question: string; options: string[]; messageId?: string }) => Promise<void>
   votePoll: (args: { pollId: string; optionId: string }) => Promise<void>
   closePoll: (args: { pollId: string; resolvedTo?: string }) => Promise<void>
+  deletePoll: (pollId: string) => Promise<void>
   addExpense: (args: { title: string; amount: number; paidBy: string; splitWith: string[]; category: Category }) => Promise<void>
   deleteExpense: (expenseId: string) => Promise<void>
   addPack: (label: string) => Promise<void>
@@ -200,6 +202,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const mCreatePoll = useMutation(api.polls.create)
   const mVotePoll = useMutation(api.polls.vote)
   const mClosePoll = useMutation(api.polls.close)
+  const mDeletePoll = useMutation(api.polls.remove)
   const mAddExpense = useMutation(api.expenses.add)
   const mDeleteExpense = useMutation(api.expenses.remove)
   const mAddPack = useMutation(api.packing.add)
@@ -227,7 +230,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         await mLeaveTrip({ tripId: tid() })
       },
       addItem: async (args) => {
-        await mAddItem({ tripId: tid(), dayId: args.dayId as Id<'days'>, title: args.title, time: args.time, note: args.note, category: args.category, fromChat: args.fromChat, atIndex: args.atIndex })
+        await mAddItem({ tripId: tid(), dayId: args.dayId as Id<'days'>, title: args.title, time: args.time, note: args.note, category: args.category, fromChat: args.fromChat, atIndex: args.atIndex, messageId: args.messageId ? (args.messageId as Id<'messages'>) : undefined })
       },
       updateItem: async ({ itemId, ...patch }) => {
         await mUpdateItem({ itemId: itemId as Id<'items'>, ...patch })
@@ -250,14 +253,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       toggleReaction: async ({ messageId, emoji }) => {
         await mToggleReaction({ messageId: messageId as Id<'messages'>, emoji })
       },
-      createPoll: async ({ question, options }) => {
-        await mCreatePoll({ tripId: tid(), question, options })
+      createPoll: async ({ question, options, messageId }) => {
+        await mCreatePoll({ tripId: tid(), question, options, messageId: messageId ? (messageId as Id<'messages'>) : undefined })
       },
       votePoll: async ({ pollId, optionId }) => {
         await mVotePoll({ pollId: pollId as Id<'polls'>, optionId })
       },
       closePoll: async ({ pollId, resolvedTo }) => {
         await mClosePoll({ pollId: pollId as Id<'polls'>, resolvedTo })
+      },
+      deletePoll: async (pollId) => {
+        await mDeletePoll({ pollId: pollId as Id<'polls'> })
       },
       addExpense: async (args) => {
         await mAddExpense({ tripId: tid(), title: args.title, amount: args.amount, paidBy: args.paidBy as Id<'users'>, splitWith: args.splitWith as Id<'users'>[], category: args.category })

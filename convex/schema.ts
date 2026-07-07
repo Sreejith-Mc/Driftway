@@ -96,7 +96,13 @@ export default defineSchema({
     status: v.union(v.literal('open'), v.literal('closed')),
     resolvedTo: v.optional(v.string()),
     options: v.array(pollOptionValidator),
-  }).index('by_trip', ['tripId']),
+    // The chat suggestion this poll was raised from, if any. Keeps a single
+    // suggestion from spawning duplicate polls, and lets the suggestion's
+    // actions re-open if the poll is later deleted.
+    messageId: v.optional(v.id('messages')),
+  })
+    .index('by_trip', ['tripId'])
+    .index('by_message', ['messageId']),
 
   expenses: defineTable({
     tripId: v.id('trips'),

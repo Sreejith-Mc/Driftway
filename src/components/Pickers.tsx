@@ -1,10 +1,14 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { cx, fmtDate, parseISO, toISO } from '../utils'
 import { CalendarIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from './Icons'
 
 // Custom, on-brand replacements for the browser's native <input type="date">
-// and <select>. The native popups can't be themed, so we render our own
-// popovers styled with the Driftway design system.
+// and <select>. The native popups can't be themed, so we render our own.
+//
+// The popovers are portaled to <body> and positioned `fixed` against the
+// trigger, so they escape the modal's `overflow` (no clipping, no scrollbar)
+// and can open above the trigger.
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 const MONTHS = [
@@ -16,12 +20,14 @@ function stripTime(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate())
 }
 
-// Closes the popover on Escape or a click anywhere outside `ref`.
-function useDismiss(ref: React.RefObject<HTMLElement>, onClose: () => void, active: boolean) {
+// Closes the popover on Escape or a mousedown outside every provided ref.
+function useDismiss(active: boolean, onClose: () => void, refs: Array<React.RefObject<HTMLElement>>) {
   useEffect(() => {
     if (!active) return
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+      const t = e.target as Node
+      if (refs.some((r) => r.current && r.current.contains(t))) return
+      onClose()
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -32,7 +38,48 @@ function useDismiss(ref: React.RefObject<HTMLElement>, onClose: () => void, acti
       window.removeEventListener('mousedown', onDown)
       window.removeEventListener('keydown', onKey)
     }
-  }, [ref, onClose, active])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, onClose])
+}
+
+// Tracks the trigger's viewport rect while open (re-measured on scroll/resize)
+// and returns a `fixed` style placing the popover above or below it.
+function useAnchor(
+  anchorRef: React.RefObject<HTMLElement>,
+  open: boolean,
+  placement: 'top' | 'bottom',
+  align: 'left' | 'right',
+  matchWidth = false,
+): React.CSSProperties {
+  const [rect, setRect] = useState<DOMRect | null>(null)
+  useLayoutEffect(() => {
+    if (!open) {
+      setRect(null)
+      return
+    }
+    const measure = () => {
+      const el = anchorRef.current
+      if (el) setRect(el.getBoundingClientRect())
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    window.addEventListener('scroll', measure, true)
+    return () => {
+      window.removeEventListener('resize', measure)
+      window.removeEventListener('scroll', measure, true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  if (!rect) return { position: 'fixed', visibility: 'hidden', top: 0, left: 0 }
+  const gap = 6
+  const style: React.CSSProperties = { position: 'fixed', zIndex: 200 }
+  if (placement === 'top') style.bottom = window.innerHeight - rect.top + gap
+  else style.top = rect.bottom + gap
+  if (align === 'right') style.right = window.innerWidth - rect.right
+  else style.left = rect.left
+  if (matchWidth) style.width = rect.width
+  return style
 }
 
 // Six weeks of cells (always 42) starting from the Sunday on/before the 1st.
@@ -63,7 +110,10 @@ export function DatePicker({
 }) {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
-  useDismiss(wrapRef, () => setOpen(false), open)
+  const popRef = useRef<HTMLDivElement>(null)
+  const close = useCallback(() => setOpen(false), [])
+  useDismiss(open, close, [wrapRef, popRef])
+  const popStyle = useAnchor(wrapRef, open, 'top', align)
 
   const [view, setView] = useState(() => {
     const base = value ? parseISO(value) : new Date()
@@ -105,59 +155,61 @@ export function DatePicker({
         <span className={cx('picker-value', !value && 'placeholder')}>{label}</span>
         <ChevronDownIcon size={15} className="picker-chevron" />
       </button>
-      {open && (
-        <div className={cx('picker-pop', 'calendar-pop', align === 'right' && 'align-right')} role="dialog" aria-label="Choose a date">
-          <div className="cal-head">
-            <button type="button" className="cal-nav" onClick={() => shift(-1)} aria-label="Previous month">
-              <ChevronLeftIcon size={16} />
-            </button>
-            <span className="cal-title">
-              {MONTHS[view.getMonth()]} {view.getFullYear()}
-            </span>
-            <button type="button" className="cal-nav" onClick={() => shift(1)} aria-label="Next month">
-              <ChevronRightIcon size={16} />
-            </button>
-          </div>
-          <div className="cal-dow">
-            {WEEKDAYS.map((d) => (
-              <span key={d} className="cal-dow-cell">
-                {d}
+      {open &&
+        createPortal(
+          <div className="picker-pop calendar-pop" style={popStyle} ref={popRef} role="dialog" aria-label="Choose a date">
+            <div className="cal-head">
+              <button type="button" className="cal-nav" onClick={() => shift(-1)} aria-label="Previous month">
+                <ChevronLeftIcon size={16} />
+              </button>
+              <span className="cal-title">
+                {MONTHS[view.getMonth()]} {view.getFullYear()}
               </span>
-            ))}
-          </div>
-          <div className="cal-grid">
-            {grid.map(({ date, inMonth }) => {
-              const iso = toISO(date)
-              const selected = value === iso
-              const disabled = minDate ? date < minDate : false
-              return (
-                <button
-                  key={iso}
-                  type="button"
-                  className={cx('cal-day', !inMonth && 'muted', selected && 'selected', iso === todayIso && !selected && 'today')}
-                  disabled={disabled}
-                  aria-pressed={selected}
-                  onClick={() => pick(date)}
-                >
-                  {date.getDate()}
-                </button>
-              )
-            })}
-          </div>
-          <div className="cal-foot">
-            <button
-              type="button"
-              className="cal-link"
-              onClick={() => {
-                const t = new Date()
-                pick(new Date(t.getFullYear(), t.getMonth(), t.getDate()))
-              }}
-            >
-              Today
-            </button>
-          </div>
-        </div>
-      )}
+              <button type="button" className="cal-nav" onClick={() => shift(1)} aria-label="Next month">
+                <ChevronRightIcon size={16} />
+              </button>
+            </div>
+            <div className="cal-dow">
+              {WEEKDAYS.map((d) => (
+                <span key={d} className="cal-dow-cell">
+                  {d}
+                </span>
+              ))}
+            </div>
+            <div className="cal-grid">
+              {grid.map(({ date, inMonth }) => {
+                const iso = toISO(date)
+                const selected = value === iso
+                const disabled = minDate ? date < minDate : false
+                return (
+                  <button
+                    key={iso}
+                    type="button"
+                    className={cx('cal-day', !inMonth && 'muted', selected && 'selected', iso === todayIso && !selected && 'today')}
+                    disabled={disabled}
+                    aria-pressed={selected}
+                    onClick={() => pick(date)}
+                  >
+                    {date.getDate()}
+                  </button>
+                )
+              })}
+            </div>
+            <div className="cal-foot">
+              <button
+                type="button"
+                className="cal-link"
+                onClick={() => {
+                  const t = new Date()
+                  pick(new Date(t.getFullYear(), t.getMonth(), t.getDate()))
+                }}
+              >
+                Today
+              </button>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }
@@ -180,7 +232,11 @@ export function Select({
 }) {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
-  useDismiss(wrapRef, () => setOpen(false), open)
+  const popRef = useRef<HTMLUListElement>(null)
+  const close = useCallback(() => setOpen(false), [])
+  useDismiss(open, close, [wrapRef, popRef])
+  // Open upward too, so it never pushes the modal into a scroll.
+  const popStyle = useAnchor(wrapRef, open, 'top', 'left', true)
   const current = options.find((o) => o.value === value)
 
   return (
@@ -196,27 +252,29 @@ export function Select({
         <span className={cx('picker-value', !current && 'placeholder')}>{current?.label ?? 'Select…'}</span>
         <ChevronDownIcon size={15} className="picker-chevron" />
       </button>
-      {open && (
-        <ul className="picker-pop picker-list" role="listbox" aria-label={ariaLabel}>
-          {options.map((o) => (
-            <li key={o.value}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={o.value === value}
-                className={cx('picker-opt', o.value === value && 'selected')}
-                onClick={() => {
-                  onChange(o.value)
-                  setOpen(false)
-                }}
-              >
-                <span>{o.label}</span>
-                {o.value === value && <CheckIcon size={14} />}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      {open &&
+        createPortal(
+          <ul className="picker-pop picker-list" style={popStyle} ref={popRef} role="listbox" aria-label={ariaLabel}>
+            {options.map((o) => (
+              <li key={o.value}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={o.value === value}
+                  className={cx('picker-opt', o.value === value && 'selected')}
+                  onClick={() => {
+                    onChange(o.value)
+                    setOpen(false)
+                  }}
+                >
+                  <span>{o.label}</span>
+                  {o.value === value && <CheckIcon size={14} />}
+                </button>
+              </li>
+            ))}
+          </ul>,
+          document.body,
+        )}
     </div>
   )
 }

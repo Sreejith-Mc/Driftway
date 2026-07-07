@@ -214,3 +214,20 @@ export const LeaveIcon = ({ size, className }: IconProps) =>
       <path d="M10 8l-4 4 4 4M6 12h11" />
     </>
   ))
+
+export const CalendarIcon = ({ size, className }: IconProps) =>
+  base(size, className, (
+    <>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+      <path d="M3.5 9.5h17M8 3v4M16 3v4" />
+    </>
+  ))
+
+export const ChevronDownIcon = ({ size, className }: IconProps) =>
+  base(size, className, <path d="M6 9.5l6 6 6-6" />)
+
+export const ChevronLeftIcon = ({ size, className }: IconProps) =>
+  base(size, className, <path d="M14.5 6l-6 6 6 6" />)
+
+export const ChevronRightIcon = ({ size, className }: IconProps) =>
+  base(size, className, <path d="M9.5 6l6 6-6 6" />)

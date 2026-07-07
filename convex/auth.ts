@@ -1,11 +1,12 @@
 import { convexAuth } from '@convex-dev/auth/server'
 import { Password } from '@convex-dev/auth/providers/Password'
+import Google from '@auth/core/providers/google'
 
-// Email + password sign-in, kept entirely inside Convex so there is no second
-// auth service to configure or that could lapse. The custom profile captures
-// the display name entered at sign-up.
+// Sign-in options. Google OAuth (needs AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET env
+// vars) sits alongside email + password. Both create the same kind of account.
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [
+    Google,
     Password({
       profile(params) {
         return {

@@ -252,3 +252,52 @@ export const rotateInvite = mutation({
     return code
   },
 })
+
+/**
+ * Deletes a trip and every row that belongs to it. Owner only — this wipes the
+ * itinerary, chat, polls, budget and packing for the whole crew.
+ */
+export const remove = mutation({
+  args: { tripId: v.id('trips') },
+  handler: async (ctx, { tripId }) => {
+    const { userId } = await requireMembership(ctx, tripId)
+    const trip = await ctx.db.get(tripId)
+    if (!trip) return
+    if (trip.ownerId !== userId) throw new Error('Only the trip owner can delete this trip')
+
+    const [members, presence, days, items, messages, polls, expenses, packing] = await Promise.all([
+      ctx.db.query('tripMembers').withIndex('by_trip', (q) => q.eq('tripId', tripId)).collect(),
+      ctx.db.query('presence').withIndex('by_trip', (q) => q.eq('tripId', tripId)).collect(),
+      ctx.db.query('days').withIndex('by_trip', (q) => q.eq('tripId', tripId)).collect(),
+      ctx.db.query('items').withIndex('by_trip', (q) => q.eq('tripId', tripId)).collect(),
+      ctx.db.query('messages').withIndex('by_trip', (q) => q.eq('tripId', tripId)).collect(),
+      ctx.db.query('polls').withIndex('by_trip', (q) => q.eq('tripId', tripId)).collect(),
+      ctx.db.query('expenses').withIndex('by_trip', (q) => q.eq('tripId', tripId)).collect(),
+      ctx.db.query('packing').withIndex('by_trip', (q) => q.eq('tripId', tripId)).collect(),
+    ])
+    const rows = [...members, ...presence, ...days, ...items, ...messages, ...polls, ...expenses, ...packing]
+    await Promise.all(rows.map((r) => ctx.db.delete(r._id)))
+    await ctx.db.delete(tripId)
+  },
+})
+
+/**
+ * Removes the signed-in member from a trip they joined. The owner can't leave —
+ * they delete the trip instead (or the trip would be left without a host).
+ */
+export const leave = mutation({
+  args: { tripId: v.id('trips') },
+  handler: async (ctx, { tripId }) => {
+    const { userId, membership } = await requireMembership(ctx, tripId)
+    const trip = await ctx.db.get(tripId)
+    if (trip && trip.ownerId === userId) {
+      throw new Error('The trip owner can’t leave — delete the trip instead')
+    }
+    await ctx.db.delete(membership._id)
+    const presence = await ctx.db
+      .query('presence')
+      .withIndex('by_trip_user', (q) => q.eq('tripId', tripId).eq('userId', userId))
+      .unique()
+    if (presence) await ctx.db.delete(presence._id)
+  },
+})

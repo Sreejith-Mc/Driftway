@@ -189,3 +189,19 @@ export const PinIcon = ({ size, className }: IconProps) =>
       <circle cx="12" cy="10" r="2.5" />
     </>
   ))
+
+export const SettingsIcon = ({ size, className }: IconProps) =>
+  base(size, className, (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2.5v2.2M12 19.3v2.2M4.2 7l1.9 1.1M17.9 15.9l1.9 1.1M4.2 17l1.9-1.1M17.9 8.1L19.8 7" />
+    </>
+  ))
+
+export const LeaveIcon = ({ size, className }: IconProps) =>
+  base(size, className, (
+    <>
+      <path d="M15 4h3.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H15" />
+      <path d="M10 8l-4 4 4 4M6 12h11" />
+    </>
+  ))

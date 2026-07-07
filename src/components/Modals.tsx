@@ -3,7 +3,7 @@ import { useActions, useStore, useYou } from '../store'
 import type { Category, ItineraryItem, Suggestion } from '../types'
 import { CATEGORIES, CATEGORY_META, cx, datesBetween, fmtDate, weekday } from '../utils'
 import { Avatar, Field, Modal } from './ui'
-import { CheckIcon, TrashIcon } from './Icons'
+import { CheckIcon, LeaveIcon, TrashIcon } from './Icons'
 
 export type ModalSpec =
   | { kind: 'newTrip' }
@@ -12,6 +12,7 @@ export type ModalSpec =
   | { kind: 'newExpense' }
   | { kind: 'newPoll'; seedQuestion?: string; seedOptions?: string[] }
   | { kind: 'invite' }
+  | { kind: 'manageTrip' }
 
 interface UIValue {
   openModal: (spec: ModalSpec) => void
@@ -40,6 +41,7 @@ export function ModalProvider({ children }: { children: React.ReactNode }) {
         <PollModal onClose={() => setSpec(null)} seedQuestion={spec.seedQuestion} seedOptions={spec.seedOptions} />
       )}
       {spec?.kind === 'invite' && <InviteModal onClose={() => setSpec(null)} />}
+      {spec?.kind === 'manageTrip' && <ManageTripModal onClose={() => setSpec(null)} />}
     </UIContext.Provider>
   )
 }
@@ -507,6 +509,103 @@ function InviteModal({ onClose }: { onClose: () => void }) {
             Done
           </button>
         </footer>
+      </div>
+    </Modal>
+  )
+}
+
+// ---------------------------------------------------------------------------
+
+function ManageTripModal({ onClose }: { onClose: () => void }) {
+  const { trip, dispatch } = useStore()
+  const actions = useActions()
+  const [busy, setBusy] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  if (!trip) return null
+
+  const isOwner = trip.members.find((m) => m.you)?.id === trip.ownerId
+  const memberCount = trip.members.length
+
+  const doDelete = async () => {
+    setBusy(true)
+    try {
+      await actions.deleteTrip()
+      dispatch({ type: 'TOAST', text: `“${trip.name}” was deleted`, kind: 'info' })
+      onClose()
+    } catch {
+      dispatch({ type: 'TOAST', text: 'Could not delete the trip — try again', kind: 'warn' })
+      setBusy(false)
+    }
+  }
+
+  const doLeave = async () => {
+    setBusy(true)
+    try {
+      await actions.leaveTrip()
+      dispatch({ type: 'TOAST', text: `You left “${trip.name}”`, kind: 'info' })
+      onClose()
+    } catch {
+      dispatch({ type: 'TOAST', text: 'Could not leave the trip — try again', kind: 'warn' })
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal title="Trip settings" onClose={onClose}>
+      <div className="modal-body">
+        <div className="manage-head">
+          <span className={cx('trip-emoji trip-emoji-lg', `cover-${trip.palette}`)}>{trip.emoji}</span>
+          <div className="manage-head-text">
+            <p className="manage-name">{trip.name}</p>
+            <p className="card-sub">
+              {trip.destination} · {memberCount} traveller{memberCount === 1 ? '' : 's'}
+            </p>
+          </div>
+        </div>
+
+        <div className="danger-zone">
+          <p className="field-label danger-label">Danger zone</p>
+          {isOwner ? (
+            <p className="card-sub">
+              Deleting removes this trip and everything in it — itinerary, chat, polls, budget and packing — for the whole
+              crew. This can’t be undone.
+            </p>
+          ) : (
+            <p className="card-sub">
+              You’ll be removed from this trip and it’ll disappear from your list. You can re-join later with an invite
+              link.
+            </p>
+          )}
+
+          {confirming ? (
+            <div className="danger-confirm">
+              <span className="danger-confirm-q">
+                {isOwner ? `Delete “${trip.name}” for everyone?` : `Leave “${trip.name}”?`}
+              </span>
+              <div className="danger-confirm-actions">
+                <button type="button" className="btn" onClick={() => setConfirming(false)} disabled={busy}>
+                  Cancel
+                </button>
+                <button type="button" className="btn btn-danger-solid" onClick={isOwner ? doDelete : doLeave} disabled={busy}>
+                  {isOwner ? <TrashIcon size={14} /> : <LeaveIcon size={14} />}
+                  {isOwner ? (busy ? 'Deleting…' : 'Delete trip') : busy ? 'Leaving…' : 'Leave trip'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button type="button" className="btn btn-danger danger-trigger" onClick={() => setConfirming(true)}>
+              {isOwner ? (
+                <>
+                  <TrashIcon size={14} /> Delete this trip
+                </>
+              ) : (
+                <>
+                  <LeaveIcon size={14} /> Leave this trip
+                </>
+              )}
+            </button>
+          )}
+        </div>
       </div>
     </Modal>
   )

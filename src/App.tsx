@@ -14,16 +14,32 @@ import { Itinerary } from './components/Itinerary'
 import { Polls } from './components/Polls'
 import { Budget } from './components/Budget'
 import { Packing } from './components/Packing'
-import { CompassIcon } from './components/Icons'
+import { AppSkeleton, ViewSkeleton } from './components/Skeleton'
+import { useUI } from './components/Modals'
+import { EmptyState } from './components/ui'
+import { CompassIcon, PlusIcon } from './components/Icons'
 import { cx } from './utils'
 
-function Splash({ label }: { label: string }) {
+// Shown when the crew has no trips at all (e.g. after deleting the last one).
+function NoTrips() {
+  const { state, dispatch } = useStore()
+  const { openModal } = useUI()
   return (
-    <div className="splash">
-      <span className="splash-mark">
-        <CompassIcon size={26} />
-      </span>
-      <p>{label}</p>
+    <div className={cx('app chat-hidden', state.navOpen && 'nav-open')}>
+      <Sidebar />
+      {state.navOpen && <div className="scrim" onClick={() => dispatch({ type: 'SET_NAV', open: false })} />}
+      <main className="main">
+        <div className="notrips">
+          <EmptyState
+            icon={<CompassIcon size={26} />}
+            title="No trips yet"
+            hint="Start a new trip or open an invite link from a friend to jump in."
+          />
+          <button className="btn btn-primary" onClick={() => openModal({ kind: 'newTrip' })}>
+            <PlusIcon size={15} /> New trip
+          </button>
+        </div>
+      </main>
     </div>
   )
 }
@@ -61,12 +77,14 @@ function Bootstrapper() {
 }
 
 function Workspace() {
-  const { state, dispatch, trip, trips, loadingTrip } = useStore()
+  const { state, dispatch, trip, trips, loadingTrips } = useStore()
 
-  if (trips.length === 0 && !loadingTrip) {
-    // Brief window before the starter trip seed lands.
-    return <Splash label="Setting up your first trip…" />
-  }
+  // First paint: the trip list is still streaming in — show the full shell as a
+  // skeleton so nothing pops in abruptly.
+  if (loadingTrips) return <AppSkeleton />
+
+  // Loaded, but the crew has no trips (e.g. deleted the last one).
+  if (trips.length === 0) return <NoTrips />
 
   return (
     <div className={cx('app', !state.chatOpen && 'chat-hidden', state.navOpen && 'nav-open')}>
@@ -84,7 +102,7 @@ function Workspace() {
           </section>
         ) : (
           <section className="view">
-            <Splash label="Loading trip…" />
+            <ViewSkeleton />
           </section>
         )}
       </main>
@@ -99,7 +117,7 @@ export default function App() {
   return (
     <>
       <AuthLoading>
-        <Splash label="Driftway" />
+        <AppSkeleton />
       </AuthLoading>
       <Unauthenticated>
         <AuthScreen />

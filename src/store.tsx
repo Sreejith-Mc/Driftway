@@ -101,6 +101,8 @@ export interface Actions {
   }) => Promise<string>
   joinTrip: (code: string) => Promise<string>
   rotateInvite: () => Promise<void>
+  deleteTrip: () => Promise<void>
+  leaveTrip: () => Promise<void>
   addItem: (args: {
     dayId: string
     title: string
@@ -134,6 +136,7 @@ interface StoreValue {
   trips: TripSummary[]
   trip: Trip | null
   loadingTrip: boolean
+  loadingTrips: boolean
   actions: Actions
 }
 
@@ -144,6 +147,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const tripsRaw = useQuery(api.trips.listMine)
   const trips = (tripsRaw ?? []) as TripSummary[]
+  const loadingTrips = tripsRaw === undefined
 
   // Resolve the active trip: keep the persisted one if it's still ours,
   // otherwise fall back to the first trip.
@@ -182,6 +186,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const mCreateTrip = useMutation(api.trips.create)
   const mJoin = useMutation(api.trips.join)
   const mRotate = useMutation(api.trips.rotateInvite)
+  const mDeleteTrip = useMutation(api.trips.remove)
+  const mLeaveTrip = useMutation(api.trips.leave)
   const mAddItem = useMutation(api.items.add)
   const mUpdateItem = useMutation(api.items.update)
   const mDeleteItem = useMutation(api.items.remove)
@@ -211,6 +217,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       joinTrip: (code) => mJoin({ code }) as Promise<string>,
       rotateInvite: async () => {
         await mRotate({ tripId: tid() })
+      },
+      deleteTrip: async () => {
+        await mDeleteTrip({ tripId: tid() })
+      },
+      leaveTrip: async () => {
+        await mLeaveTrip({ tripId: tid() })
       },
       addItem: async (args) => {
         await mAddItem({ tripId: tid(), dayId: args.dayId as Id<'days'>, title: args.title, time: args.time, note: args.note, category: args.category, fromChat: args.fromChat, atIndex: args.atIndex })
@@ -270,8 +282,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   )
 
   const value = useMemo<StoreValue>(
-    () => ({ state: { ...state, activeTripId }, dispatch, trips, trip, loadingTrip, actions }),
-    [state, activeTripId, trips, trip, loadingTrip, actions],
+    () => ({ state: { ...state, activeTripId }, dispatch, trips, trip, loadingTrip, loadingTrips, actions }),
+    [state, activeTripId, trips, trip, loadingTrip, loadingTrips, actions],
   )
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
 }

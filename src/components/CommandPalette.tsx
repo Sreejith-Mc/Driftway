@@ -4,7 +4,7 @@ import { useStore } from '../store'
 import type { Tab } from '../types'
 import { exportItinerary } from '../export'
 import { useUI } from './Modals'
-import { ChatIcon, CoinIcon, CompassIcon, DownloadIcon, MapIcon, MoonIcon, PackIcon, PinIcon, PlusIcon, PollIcon, SunIcon, UserPlusIcon, XIcon } from './Icons'
+import { ChatIcon, CoinIcon, CompassIcon, DownloadIcon, MapIcon, MoonIcon, PackIcon, PinIcon, PlusIcon, PollIcon, SettingsIcon, SunIcon, UserPlusIcon, XIcon } from './Icons'
 
 interface Command {
   id: string
@@ -103,6 +103,16 @@ export function CommandPalette() {
         run: () => {
           close()
           openModal({ kind: 'newTrip' })
+        },
+      },
+      {
+        id: 'manage-trip',
+        label: 'Trip settings (delete or leave)',
+        icon: <SettingsIcon size={15} />,
+        keywords: 'settings manage delete remove leave trip danger',
+        run: () => {
+          close()
+          openModal({ kind: 'manageTrip' })
         },
       },
       {

@@ -1,7 +1,7 @@
 import { useStore } from '../store'
 import type { Tab } from '../types'
 import { cx, fmtRange, daysUntil } from '../utils'
-import { ChatIcon, CoinIcon, CompassIcon, DownloadIcon, MapIcon, MenuIcon, PackIcon, PollIcon, UserPlusIcon } from './Icons'
+import { ChatIcon, CoinIcon, CompassIcon, DownloadIcon, MapIcon, MenuIcon, PackIcon, PollIcon, SettingsIcon, UserPlusIcon } from './Icons'
 import { AvatarStack } from './ui'
 import { exportItinerary } from '../export'
 import { useUI } from './Modals'
@@ -62,6 +62,14 @@ export function TopBar() {
             onClick={() => dispatch({ type: 'TOGGLE_CHAT' })}
           >
             <ChatIcon size={17} />
+          </button>
+          <button
+            className="icon-btn"
+            title="Trip settings"
+            aria-label="Trip settings"
+            onClick={() => openModal({ kind: 'manageTrip' })}
+          >
+            <SettingsIcon size={17} />
           </button>
         </div>
       </div>

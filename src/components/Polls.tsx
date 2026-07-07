@@ -3,7 +3,7 @@ import type { Poll } from '../types'
 import { guessCategory } from '../sim'
 import { cx, timeAgo } from '../utils'
 import { Avatar, EmptyState } from './ui'
-import { CheckIcon, PinIcon, PlusIcon, PollIcon } from './Icons'
+import { CheckIcon, PinIcon, PlusIcon, PollIcon, TrashIcon } from './Icons'
 import { useUI } from './Modals'
 
 export function Polls() {
@@ -76,6 +76,21 @@ function PollCard({ poll }: { poll: Poll }) {
     dispatch({ type: 'TOAST', text: `Winner “${leader.label}” added to Day 1 — drag it wherever it fits`, kind: 'ok' })
   }
 
+  const mine = poll.createdBy === you.id
+
+  const del = async () => {
+    try {
+      await actions.deletePoll(poll.id)
+      dispatch({
+        type: 'TOAST',
+        text: poll.messageId ? 'Poll deleted — that suggestion is open again' : 'Poll deleted',
+        kind: 'info',
+      })
+    } catch {
+      dispatch({ type: 'TOAST', text: 'Could not delete the poll — try again', kind: 'warn' })
+    }
+  }
+
   return (
     <article className={cx('poll-card', !isOpen && 'poll-closed')}>
       <header className="poll-head">
@@ -124,16 +139,24 @@ function PollCard({ poll }: { poll: Poll }) {
         })}
       </div>
 
-      {isOpen && (
+      {(isOpen || mine) && (
         <footer className="poll-foot">
-          {poll.createdBy === you.id ? (
+          {mine ? (
             <>
-              <button className="btn btn-small" onClick={() => actions.closePoll({ pollId: poll.id })}>
-                Close poll
+              <button className="btn btn-small btn-danger" onClick={del} title="Delete this poll">
+                <TrashIcon size={12} /> Delete
               </button>
-              <button className="btn btn-small btn-primary" onClick={addWinner} disabled={!leader || leader.votes.length === 0}>
-                <PinIcon size={12} /> Send winner to itinerary
-              </button>
+              <span className="spacer" />
+              {isOpen && (
+                <>
+                  <button className="btn btn-small" onClick={() => actions.closePoll({ pollId: poll.id })}>
+                    Close poll
+                  </button>
+                  <button className="btn btn-small btn-primary" onClick={addWinner} disabled={!leader || leader.votes.length === 0}>
+                    <PinIcon size={12} /> Send winner to itinerary
+                  </button>
+                </>
+              )}
             </>
           ) : (
             <span className="poll-hint">tap an option to cast or move your vote</span>

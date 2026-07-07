@@ -95,6 +95,7 @@ async function assembleTrip(ctx: QueryCtx, trip: Doc<'trips'>, viewerId: Id<'use
         resolvedTo: p.resolvedTo,
         ts: p._creationTime,
         options: p.options,
+        messageId: (p.messageId as string) ?? undefined,
       })),
     expenses: [...expenses]
       .sort((a, b) => b._creationTime - a._creationTime)

@@ -899,34 +899,58 @@ li:hover .icon-btn-quiet,
 /* ---------- message reactions ---------- */
 
 .bubble-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
   min-width: 0;
 }
 
-.msg-you .bubble-row {
-  flex-direction: row-reverse;
-}
-
+/* Reaction affordance sits on the bubble's bottom border, hanging off the
+   outer corner so the picker never covers the message text. */
 .react-wrap {
-  position: relative;
+  position: absolute;
+  bottom: -11px;
+  right: -6px;
   display: inline-flex;
   flex-shrink: 0;
+  z-index: 6;
+}
+
+.msg-you .react-wrap {
+  right: auto;
+  left: -6px;
 }
 
 .react-btn {
   width: 24px;
   height: 24px;
   border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
   opacity: 0;
-  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.12s ease;
+}
+
+.react-btn:hover {
+  transform: scale(1.08);
 }
 
 .msg:hover .react-btn,
 .react-btn:focus-visible,
+.react-btn.reacted,
 .react-wrap.open .react-btn {
   opacity: 1;
+}
+
+.react-btn-emoji {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.react-btn.reacted {
+  border-color: color-mix(in srgb, var(--teal) 45%, transparent);
+  background: var(--teal-soft);
 }
 
 @media (hover: none) {
@@ -935,10 +959,11 @@ li:hover .icon-btn-quiet,
   }
 }
 
+/* Popup opens upward from the trigger, hugging the bubble's outer edge. */
 .react-picker {
   position: absolute;
-  bottom: calc(100% + 4px);
-  left: 0;
+  bottom: calc(100% + 6px);
+  right: 0;
   display: flex;
   gap: 2px;
   padding: 4px 6px;
@@ -951,8 +976,8 @@ li:hover .icon-btn-quiet,
 }
 
 .msg-you .react-picker {
-  left: auto;
-  right: 0;
+  right: auto;
+  left: 0;
 }
 
 .react-picker button {

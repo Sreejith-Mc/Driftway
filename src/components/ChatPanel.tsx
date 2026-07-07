@@ -150,6 +150,8 @@ function MessageBubble({
     }
   }
 
+  const yourReaction = you ? message.reactions?.find((r) => r.users.includes(you.id))?.emoji : undefined
+
   const reactionTitle = (users: string[]) =>
     users
       .map((id) => {
@@ -172,12 +174,12 @@ function MessageBubble({
           <span className={cx('react-wrap', picker && 'open')}>
             <button
               type="button"
-              className="icon-btn react-btn"
-              aria-label="Add reaction"
-              title="Add reaction"
+              className={cx('icon-btn', 'react-btn', yourReaction && 'reacted')}
+              aria-label={yourReaction ? 'Change your reaction' : 'Add reaction'}
+              title={yourReaction ? 'Change your reaction' : 'Add reaction'}
               onClick={() => setPicker((p) => !p)}
             >
-              <SmileIcon size={14} />
+              {yourReaction ? <span className="react-btn-emoji">{yourReaction}</span> : <SmileIcon size={14} />}
             </button>
             {picker && (
               <span className="react-picker" role="menu" aria-label="Pick a reaction">

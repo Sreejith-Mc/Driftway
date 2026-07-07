@@ -3,6 +3,7 @@ import { useActions, useStore, useYou } from '../store'
 import type { Category, ItineraryItem, Suggestion } from '../types'
 import { CATEGORIES, CATEGORY_META, cx, datesBetween, fmtDate, weekday } from '../utils'
 import { Avatar, Field, Modal } from './ui'
+import { DatePicker, Select } from './Pickers'
 import { CheckIcon, LeaveIcon, TrashIcon } from './Icons'
 
 export type ModalSpec =
@@ -138,13 +139,15 @@ function ItemModal({
         </Field>
         <div className="field-row">
           <Field label="Day">
-            <select value={targetDay} onChange={(e) => setTargetDay(e.target.value)}>
-              {trip.days.map((d, i) => (
-                <option key={d.id} value={d.id}>
-                  Day {i + 1} · {weekday(d.date).slice(0, 3)} {fmtDate(d.date)}
-                </option>
-              ))}
-            </select>
+            <Select
+              value={targetDay}
+              onChange={setTargetDay}
+              ariaLabel="Day"
+              options={trip.days.map((d, i) => ({
+                value: d.id,
+                label: `Day ${i + 1} · ${weekday(d.date).slice(0, 3)} ${fmtDate(d.date)}`,
+              }))}
+            />
           </Field>
           <Field label="Time (optional)">
             <input value={time} onChange={(e) => setTime(e.target.value)} placeholder="7:30pm" />
@@ -257,17 +260,26 @@ function NewTripModal({ onClose }: { onClose: () => void }) {
         </Field>
         <div className="field-row">
           <Field label="Start">
-            <input type="date" value={start} onChange={(e) => setStart(e.target.value)} required />
+            <DatePicker
+              value={start}
+              align="left"
+              ariaLabel="Trip start date"
+              onChange={(v) => {
+                setStart(v)
+                if (end && end < v) setEnd(v)
+              }}
+            />
           </Field>
           <Field label="End">
-            <input type="date" value={end} min={start} onChange={(e) => setEnd(e.target.value)} required />
+            <DatePicker value={end} min={start} align="right" ariaLabel="Trip end date" onChange={setEnd} />
           </Field>
           <Field label="Currency">
-            <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
-              {CURRENCIES.map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </select>
+            <Select
+              value={currency}
+              onChange={setCurrency}
+              ariaLabel="Currency"
+              options={CURRENCIES.map((c) => ({ value: c, label: c }))}
+            />
           </Field>
         </div>
         <footer className="modal-actions">
@@ -328,13 +340,12 @@ function ExpenseModal({ onClose }: { onClose: () => void }) {
           </Field>
         </div>
         <Field label="Paid by">
-          <select value={paidBy} onChange={(e) => setPaidBy(e.target.value)}>
-            {trip.members.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.you ? 'You' : m.name}
-              </option>
-            ))}
-          </select>
+          <Select
+            value={paidBy}
+            onChange={setPaidBy}
+            ariaLabel="Paid by"
+            options={trip.members.map((m) => ({ value: m.id, label: m.you ? 'You' : m.name }))}
+          />
         </Field>
         <Field label="Split between">
           <div className="split-row">

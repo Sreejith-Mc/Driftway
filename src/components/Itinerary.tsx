@@ -70,16 +70,20 @@ function DaySection({ day, index }: { day: Day; index: number }) {
     if (payload.kind === 'item' && payload.itemId) {
       await actions.moveItem({ itemId: payload.itemId, toDayId: day.id, toIndex: idx })
     } else if (payload.kind === 'suggestion' && payload.title) {
-      await actions.addItem({
-        dayId: day.id,
-        title: payload.title,
-        time: payload.time,
-        category: payload.category ?? 'other',
-        fromChat: true,
-        atIndex: idx,
-      })
-      if (payload.messageId) await actions.markMessageAdded(payload.messageId)
-      dispatch({ type: 'TOAST', text: `“${payload.title}” dropped onto Day ${index + 1}`, kind: 'ok' })
+      try {
+        await actions.addItem({
+          dayId: day.id,
+          title: payload.title,
+          time: payload.time,
+          category: payload.category ?? 'other',
+          fromChat: true,
+          atIndex: idx,
+          messageId: payload.messageId,
+        })
+        dispatch({ type: 'TOAST', text: `“${payload.title}” dropped onto Day ${index + 1}`, kind: 'ok' })
+      } catch {
+        dispatch({ type: 'TOAST', text: 'That suggestion was already actioned by someone', kind: 'warn' })
+      }
     }
   }
 

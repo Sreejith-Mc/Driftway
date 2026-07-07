@@ -7,19 +7,47 @@ function optId(): string {
 }
 
 export const create = mutation({
-  args: { tripId: v.id('trips'), question: v.string(), options: v.array(v.string()) },
-  handler: async (ctx, { tripId, question, options }) => {
+  args: {
+    tripId: v.id('trips'),
+    question: v.string(),
+    options: v.array(v.string()),
+    messageId: v.optional(v.id('messages')),
+  },
+  handler: async (ctx, { tripId, question, options, messageId }) => {
     const { userId } = await requireMembership(ctx, tripId)
     const clean = options.map((o) => o.trim()).filter(Boolean)
     if (!question.trim() || clean.length < 2) throw new Error('A poll needs a question and at least two options')
+    // A chat suggestion can only be actioned once. Reject if it's already been
+    // added to the itinerary or someone else already raised a poll for it.
+    if (messageId) {
+      const msg = await ctx.db.get(messageId)
+      if (msg?.addedToItinerary) throw new Error('That suggestion is already on the itinerary')
+      const existing = await ctx.db
+        .query('polls')
+        .withIndex('by_message', (q) => q.eq('messageId', messageId))
+        .first()
+      if (existing) throw new Error('That suggestion is already up for a vote')
+    }
     const id = await ctx.db.insert('polls', {
       tripId,
       question: question.trim(),
       createdBy: userId,
       status: 'open',
       options: clean.map((label) => ({ id: optId(), label, votes: [] })),
+      messageId,
     })
     return id as string
+  },
+})
+
+export const remove = mutation({
+  args: { pollId: v.id('polls') },
+  handler: async (ctx, { pollId }) => {
+    const poll = await ctx.db.get(pollId)
+    if (!poll) return
+    const { userId } = await requireMembership(ctx, poll.tripId)
+    if (poll.createdBy !== userId) throw new Error('Only the person who started this poll can delete it')
+    await ctx.db.delete(pollId)
   },
 })
 

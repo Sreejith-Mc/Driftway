@@ -69,6 +69,7 @@ export interface Poll {
   createdBy: string
   ts: number
   resolvedTo?: string // option id chosen / added to itinerary
+  messageId?: string // chat suggestion this poll was raised from, if any
 }
 
 export interface Expense {

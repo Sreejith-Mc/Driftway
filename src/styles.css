@@ -1118,6 +1118,15 @@ li:hover .icon-btn-quiet,
   margin-top: 5px;
 }
 
+/* "Up for a vote" status — a clickable jump to the Polls tab. */
+.sugg-voting {
+  color: var(--accent);
+}
+
+.sugg-voting:hover {
+  text-decoration: underline;
+}
+
 .sugg-actions {
   display: flex;
   gap: 6px;
